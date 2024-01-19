@@ -174,19 +174,13 @@ class RGATConv(MessagePassing):
         if self.attention_mechanism == "within-relation":
             across_out = tlx.zeros_like(alpha)
             for r in range(self.num_relations):
-                mask = tlx.equal(edge_type, r)
+                mask = tlx.convert_to_tensor(tlx.equal(edge_type, r), dtype=tlx.bool)
                 dst_index = edge_index[1, :]
-                segment_ids = tf.boolean_mask(dst_index, mask)
-                soft_data = tf.boolean_mask(alpha, mask)
-                print(alpha[mask])
-                print(dst_index[mask])
-                # assert tf.reduce_max(segment_ids) < num_nodes
-                # across_out[mask] = segment_softmax(alpha[mask], segment_ids, num_nodes)
-                across_out[mask] = segment_softmax(soft_data, segment_ids, num_nodes)
-            #     mask = edge_type == r
-            #     # segment_ids = edge_index[1, mask]
-            #     # tlx.reshape(segment_ids, (-1,))
-            #     across_out[mask] = segment_softmax(alpha[mask],edge_index[1, :] , num_nodes)
+                segment_ids = tlx.mask_select(dst_index, mask)
+                soft_data = tlx.mask_select(alpha, mask)
+                softmax_result = segment_softmax(soft_data, segment_ids, num_nodes)
+                indices = tlx.reshape(mask_to_index(mask), shape=[-1, 1])
+                across_out = tlx.tensor_scatter_nd_update(across_out, indices, softmax_result)
             alpha = across_out
         elif self.attention_mechanism == "across-relation":
             alpha = segment_softmax(alpha, edge_index[1, :], num_nodes)
